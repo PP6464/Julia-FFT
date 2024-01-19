@@ -54,6 +54,4 @@ def check_dft(a, dft):
 
 p = 11
 a = [random.uniform(0, 1) for _ in range(p)]
-# check_dft(a, bluestein(a))
-
-# print(list(map(lambda x : str(round(x.real, 2)) + " + i * " + str(round(x.imag, 2)), bluestein([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))))
+check_dft(a, bluestein(a))
