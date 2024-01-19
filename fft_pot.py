@@ -1,3 +1,6 @@
+import numpy as np
+import math
+
 # De clase: FFT para potencias de 2
 def fft(pol, xi):
     n = len(pol)
@@ -21,3 +24,5 @@ def ifft(vec, xi):
     for i in range(n):
         res[i] /= n
     return res
+
+print(fft([1, 2, 3, 4], np.exp(-1j * math.tau/4)))
