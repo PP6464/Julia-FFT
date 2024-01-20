@@ -1,7 +1,7 @@
 import math
 import random
 
-from fft_pot import fft,ifft
+from fft_pot import fft,ifft,listprint
 
 def bluestein(a):
     #Calculos basicos
@@ -19,7 +19,6 @@ def bluestein(a):
 
     #Extension de u
     u_l = u + [0] * (l - n)
-    
 
     #Extension de v
     aux = v[1:]
@@ -28,8 +27,9 @@ def bluestein(a):
 
     #Calculo de la convolucion
 
-    dft_u_l = fft(u_l, xi_l)  
-    dft_v_l = fft(v_l, xi_l)  
+    dft_u_l = fft(u_l, xi_l) 
+
+    dft_v_l = fft(v_l, xi_l)
 
     uv_l = [i*j for i,j in zip(dft_u_l,dft_v_l)]
 
@@ -51,7 +51,9 @@ def check_dft(a, dft):
     ]
     print(sum([abs(dft[i] - dft_correcta[i]) for i in range(len(a))]))
 
+a = [i + 1 for i in range(11)]
+import numpy as np
+#print(fft([(1+0j), (1.0000000000000002-1.7320508075688772j), (-1.5000000000000009+2.5980762113533156j), 0, 0, 0, 0, 0], np.exp(math.tau*-1j/8)))
+listprint(bluestein([i for i in range(1, 12)]))
 
-p = 11
-a = [random.uniform(0, 1) for _ in range(p)]
-check_dft(a, bluestein(a))
+# list(map(lambda x : str(round(x.real, ndigits=2)) + " + " + str(round(x.imag, ndigits=2)) + "i", bluestein(a)))
