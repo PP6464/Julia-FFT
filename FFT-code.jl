@@ -207,5 +207,3 @@ function fft(x::Vector{T}) where T <: Real
         
     end
 end
-
-display(dft([1, 2, 3]))
