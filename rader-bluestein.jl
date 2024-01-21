@@ -7,16 +7,12 @@ end
 function format_for_display(x::Union{Vector{T}, Matrix{T}}) where T <: Number
     return map(z -> round(real(z), digits = 2) + im * round(imag(z), digits = 2), x)
 end
-function radix2FFT(x::Vector{T}, ω::Union{Complex{Float64}, Nothing} = nothing) where T <: Number
+function radix2FFT(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <: Number, U <: Number}
     N = length(x)
 
     if N == 1
         return x # One-point time domain spectrum is the same in frequency domain
     end
-
-    #println("FFT of:")
-    #display(x)
-    #println("with root of unity: $ω")
 
     # Initialise the root of unity to be used (normally conjugate of principal Nᵗʰ root of unity)
     # (Can supply different ω values, see radix2IFFT)
@@ -29,17 +25,8 @@ function radix2FFT(x::Vector{T}, ω::Union{Complex{Float64}, Nothing} = nothing)
 
     res = zeros(Complex{Float64}, N)
 
-    #println("X evens: ")
-    #println(Xₑ)
-    #println("X odds: ")
-    #println(Xₒ)
-
     # Use the fact that the second part of the twiddle factors is the conjugate of the first when input is purely real
-    for i in 1:N÷2
-        #println("res[$i]: ")
-        #println(Xₑ[i] + Xₒ[i] * ω^(i-1))
-        #println("res[$(i+N÷2)]: ")
-        #println(Xₑ[i] - Xₒ[i] * ω^(i-1))
+    for i ∈ 1:N÷2
         res[i] = Xₑ[i] + Xₒ[i] * ω^(i-1) 
         res[i+N÷2] = Xₑ[i] - Xₒ[i] * ω^(i-1)
     end
@@ -47,7 +34,7 @@ function radix2FFT(x::Vector{T}, ω::Union{Complex{Float64}, Nothing} = nothing)
     return res
 end
 
-function radix2IFFT(x::Vector{T}, ω::Union{Complex{Float64}, Nothing} = nothing) where T <: Number
+function radix2IFFT(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <: Number, U <: Number}
     N = length(x)
 
     if N == 1
@@ -68,19 +55,19 @@ function bluestein(x::Vector{T}) where T <: Number
     ω = exp(τ*im/N)
 
     # Make lists u(n) and v(n)
-    u = [x[i+1] * ω^(-(i^2)/2) for i in 0:N-1]
-    v = [ω^((i^2)/2) for i in 0:N-1]
-    v_conj = [ω^(-(i^2)/2) for i in 0:N-1]
+    u = [x[i+1] * ω^(-(i^2)/2) for i ∈ 0:N-1]
+    v = [ω^((i^2)/2) for i ∈ 0:N-1]
+    v_conj = [ω^(-(i^2)/2) for i ∈ 0:N-1]
 
     L = 2^ceil(log2(2*N+1))
     ωₗ = exp(τ*im/L) # Calculate root of unity required
 
-    uₗ = vcat(u, [0 for _ in 1:L-N]) # Pad u(n)
+    uₗ = vcat(u, [0 for _ ∈ 1:L-N]) # Pad u(n)
 
     # Pad v(n) and shift
     aux = v[2:end]
     reverse!(aux)
-    vₗ = vcat(v, [0 for i in 1:L - 2*N + 1], aux)
+    vₗ = vcat(v, [0 for i ∈ 1:L - 2*N + 1], aux)
 
     # FFT circular convolve
     fft_uₗ = radix2FFT(uₗ, ωₗ)
@@ -96,6 +83,65 @@ function bluestein(x::Vector{T}) where T <: Number
     return v_conj .* ift
 end
 
-display(bluestein([i for i in 1:11]))
+# Rader FFT
+
+# Successive powers of g up to m - 1, all mod m
+function sequence(g::Int64, m::Int64)
+    return [(g^i)%m for i ∈ 0:m-2]
+end
+
+# Use to generate the entire group (𝐙/p𝐙)* and successive powers (p is prime)
+function generator(p::Int64)
+    for g ∈ 2:p-1
+        perm = sequence(g, p)
+        if length(perm) == p - 1
+            return g, perm
+        end
+    end
+end
+
+# FFT convolution of u and v, where u and V are of the same length (uses padding)
+function conv(u::Vector{T}, v::Vector{U}) where {T <: Number, U <: Number}
+    N = length(u)
+    L = 2^ceil(log2(2N+1))
+    ωₗ = exp(τ*im/L)
+
+    fft_uₗ = radix2FFT(vcat(u, [0 for _ ∈ 1:L-N]), ωₗ)
+    fft_vₗ = radix2FFT(vcat(v, [0 for _ ∈ 1:L-N]), ωₗ)
+
+    # Convolution theorem: 𝓕{u(x) ∗ v(x)} = 𝓕{u(x)} . 𝓕{v(x)}
+    uₗvₗ = radix2IFFT(fft_uₗ .* fft_vₗ)
+
+    return [uₗvₗ[i] + uₗvₗ[i + N] for i in 1:N]
+end
+
+function rader(x::Vector{T}) where T <: Number
+    N = length(x)
+
+    g, g_seq = generator(N)
+    g⁻¹ = (g^(N-2))%N 
+    g⁻¹_seq = sequence(g⁻¹, N)
+
+    # u(n) = ω^g⁻ⁿ
+    ωₚ = exp(τ*im/N) # N-th root of unity
+    u = [ωₚ^gₙ for gₙ ∈ g⁻¹_seq]
+
+    # v(n) = x[gᵐ]
+    v = [x[gᵐ+1] for gᵐ ∈ g_seq]
+
+    uv = conv(u, v)
+
+    fft = zeros(Complex{Float64}, N)
+    fft[1] = ∑(x) # FFT[0] = ∑ᵢ xᵢ (Julia is 1-indexed)
+
+    # FFT[g⁻ʲ] = a₀ + (u * v)ⱼ (Julia is 1-indexed)
+    for i in 1:N-1
+        fft[g⁻¹_seq[i] + 1] = x[1] + uv[i]
+    end
+
+    return fft
+end
+
 j = im
-#display(radix2IFFT([(0.4999999999999987+0.8660254037844383j), (3.04088222241137-3.0355339059327404j), (11.232050807568882+4.133974596215561j), (5.408607520371811-4.0355339059327395j), (16.5+0.8660254037844384j), (-2.2370346451180003+4.035533905932738j), (7.767949192431123-5.866025403784442j), (5.787544902334822+3.0355339059327404j)], (0.7071067811865476+0.7071067811865476j)))
+
+display(rader([1im,2,3]))
