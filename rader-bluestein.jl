@@ -187,13 +187,32 @@ function ispow2(x::Int64)
     return (x & x-1) == 0 # Bitwise and of x and x-1 == 0 ⟺ x is a power of 2
 end
 
-# function int_to_bits(x::Int64, total_length::Int64)
-#     return digits(x, base = 2, pad = total_length)
-# end
+function int_to_bits(x::Int64, total_length::Int64)
+    return digits(x, base = 2, pad = total_length)
+end
 
-# function bits_to_int(x::Vector{Int64})
-#     return sum([v*2^(i-1) for (i, v) ∈ enumerate(x)])
-# end
+function bits_to_int(x::Vector{Int64})
+    return sum([v*2^(i-1) for (i, v) ∈ enumerate(x)])
+end
+
+# Computes the FFT butterfly operator to reconstruct an 2N-point spectrum from two N point spectra
+function fft_butterfly(evens::Vector{A}, odds::Vector{B}, ω::Union{Complex{C}, Nothing} = nothing) where {A <: Number, B <: Number, C <: Number}
+    N = length(evens)
+
+    # Initialise ω to exp(-iτ/2N)
+    if ω === nothing
+        ω = exp(im*τ/2N)
+    end
+
+    res = zeros(Complex, 2N)
+
+    for i ∈ 1:N
+        res[i] = evens[i] + odds[i] * ω^(i-1)
+        res[i+N] = evens[i] - odds[i] * ω^(i-1)
+    end
+
+    return res
+end
 
 function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <: Number, U <: Number}
     N = length(x)
@@ -209,13 +228,24 @@ function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <:
             k = factors[2]
             p = keys(factors)[end]
 
+            lₚ = length(digits(p, base=2)) # Length of p in base 2
+
             # Can split into 2ᵏ chunks of size p, then rader FFT each chunk, then reconstruct
             chunks = collect(Iterators.partition(x, p))
-            
+            chunk_indices = [(i-1) for i ∈ 1:p]
+            chunk_bit_indices = [int_to_bits(i, lₚ) for i ∈ chunk_indices]
+            chunk_bit_reversed_indices = [bits_to_int(reverse(i)) + 1 for i ∈ chunk_bit_indices] # Julia is 1-indexed, hence adding 1 after bit reversal
+            chunks_rearranged = chunks[chunk_bit_reversed_indices]
+
+            res::Vector{Vector{Complex{Float64}}} = [[]]
+
+            for i ∈ 1:k
+                
+            end
         else
 
         end
     end
 end
 
-display(radix2FFT([0, 2]))
+display(fft_butterfly([0,], [2,]))
