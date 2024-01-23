@@ -217,6 +217,12 @@ end
 function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <: Number, U <: Number}
     N = length(x)
 
+    # Initialise ω to exp(iτ/N) if not supplied
+    # See IFFT for when different ω supplied
+    if ω === nothing
+        ω = exp(im*τ/N)
+    end
+
     if ispow2(N)
         return radix2FFT(x, ω)
     elseif isprime(N)
@@ -226,7 +232,7 @@ function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <:
 
         if 2 ∈ keys(factors) && length(factors) == 2 && factors[collect(keys(factors))[end]] == 1 # N can be expressed in the form 2ᵏ ⋅ p, where k ∈ ℕ, p is prime
             k = factors[2]
-            p = keys(factors)[end]
+            p = collect(keys(factors))[end]
 
             lₚ = length(digits(p, base=2)) # Length of p in base 2
 
@@ -236,16 +242,21 @@ function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <:
             chunk_bit_indices = [int_to_bits(i, lₚ) for i ∈ chunk_indices]
             chunk_bit_reversed_indices = [bits_to_int(reverse(i)) + 1 for i ∈ chunk_bit_indices] # Julia is 1-indexed, hence adding 1 after bit reversal
             chunks_rearranged = chunks[chunk_bit_reversed_indices]
+            chunks_fft = [rader_FFT(chunk) for chunk ∈ chunks_rearranged]
 
-            res::Vector{Vector{Complex{Float64}}} = [[]]
+            res::Vector{Vector{Complex{Float64}}} = chunks_fft
 
             for i ∈ 1:k
-                
+                butterfly_size = 2^(i-1)
+                res_chunked = collect(Iterators.partition(res_copy, butterfly_size))
+                res = [fft_butterfly(i[1], i[2], ω) for i ∈ res_chunked]
             end
+
+            return res
         else
 
         end
     end
 end
 
-display(fft_butterfly([0,], [2,]))
+display(fft([1,2,3,4,5,6]))
