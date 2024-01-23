@@ -26,7 +26,7 @@ function radix2FFT(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where
     Xₑ = radix2FFT(x[1:2:end], ω^2) # Get the even indices of x (0-indexed) and recursively FFT (Julia is 1-indexed)
     Xₒ = radix2FFT(x[2:2:end], ω^2) # Get the odd indices of x (0-indexed) and recursively FFT (Julia is 1-indexed)
 
-    res = zeros(Complex{Float64}, N)
+    res = zeros(ComplexF64, N)
 
     # Use the fact that the second part of the twiddle factors is the conjugate of the first when input is purely real
     for i ∈ 1:N÷2
@@ -146,7 +146,7 @@ function rader_FFT(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where
     # Initialise ω to exp(iτ/N) if not supplied
     # See rader_IFFT for when different ω supplied
     if ω === nothing
-        ω = exp(τ*im/N)
+        ω = exp(-τ*im/N)
     end
 
     g, g_seq = generator(N)
@@ -161,7 +161,7 @@ function rader_FFT(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where
 
     uv = conv(u, v)
 
-    fft = zeros(Complex{Float64}, N)
+    fft = zeros(ComplexF64, N)
     fft[1] = ∑(x) # FFT[0] = ∑ᵢ xᵢ (Julia is 1-indexed)
 
     # FFT[g⁻ʲ] = a₀ + (u * v)ⱼ (Julia is 1-indexed)
@@ -187,33 +187,6 @@ function ispow2(x::Int64)
     return (x & x-1) == 0 # Bitwise and of x and x-1 == 0 ⟺ x is a power of 2
 end
 
-function int_to_bits(x::Int64, total_length::Int64)
-    return digits(x, base = 2, pad = total_length)
-end
-
-function bits_to_int(x::Vector{Int64})
-    return sum([v*2^(i-1) for (i, v) ∈ enumerate(x)])
-end
-
-# Computes the FFT butterfly operator to reconstruct an 2N-point spectrum from two N point spectra
-function fft_butterfly(evens::Vector{A}, odds::Vector{B}, ω::Union{Complex{C}, Nothing} = nothing) where {A <: Number, B <: Number, C <: Number}
-    N = length(evens)
-
-    # Initialise ω to exp(-iτ/2N)
-    if ω === nothing
-        ω = exp(im*τ/2N)
-    end
-
-    res = zeros(Complex, 2N)
-
-    for i ∈ 1:N
-        res[i] = evens[i] + odds[i] * ω^(i-1)
-        res[i+N] = evens[i] - odds[i] * ω^(i-1)
-    end
-
-    return res
-end
-
 function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <: Number, U <: Number}
     N = length(x)
 
@@ -226,40 +199,21 @@ function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <:
     if ispow2(N)
         return radix2FFT(x, ω)
     elseif isprime(N)
-        return rader_FFT(x, ω)
+        return rader_FFT(x, 1/ω)
     else
-        factors = factor(N)
-
-        if 2 ∈ keys(factors) && length(factors) == 2 # N can be expressed in the form 2ᵏ ⋅ p, where k, p ∈ ℕ
-            k = factors[2]
-            p = collect(keys(factors))[end]
-            p_is_prime = isprime(p)
-
-            lₚ = k-1 # Length of 2ᵏ in base 2
-
-            # Can split into 2ᵏ chunks of size p, then FFT each chunk, then reconstruct
-            chunks = Vector{Vector{T}}(collect(Iterators.partition(x, p)))
-            chunk_indices = [(i-1) for i ∈ 1:2^k]
-            chunk_bit_indices = [int_to_bits(i, lₚ) for i ∈ chunk_indices]
-            chunk_bit_reversed_indices = [bits_to_int(reverse(i)) + 1 for i ∈ chunk_bit_indices] # Julia is 1-indexed, hence adding 1 after bit reversal
-            chunks_rearranged = chunks[chunk_bit_reversed_indices]
-            chunks_fft = [p_is_prime ? rader_FFT(chunk) : bluestein_FFT(chunk) for chunk ∈ chunks_rearranged]
-
-            res_vecs::Vector{Vector{Complex{Float64}}} = chunks_fft # used to store butterfly results
-
-            for i ∈ 1:k
-                new_res::Vector{Vector{Complex{Float64}}} = []
-                for j in 1:2^(k-i)
-                    new_res[j] = fft_butterfly(res_vecs[],res_vecs[],ω)
-                end
-                res_vecs = new_res
-            end
-
-            return collect(Iterators.flatten(res_vecs))
-        else
-            return bluestein_FFT(x)
-        end
+        return bluestein_FFT(x, ω)
     end
 end
 
-display(fft([1,2,3,4,5,6]))
+function ifft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <: Number, U <: Number}
+    N = length(x)
+
+    # Initialise ω to principal Nth root of unity if not supplied
+    if ω === nothing
+        ω = exp(τ*im/N)
+    end
+
+    return fft(x, 1/ω) ./ N
+end
+
+display(ifft(fft([1,2,3])))
