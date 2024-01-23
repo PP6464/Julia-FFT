@@ -230,31 +230,34 @@ function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <:
     else
         factors = factor(N)
 
-        if 2 ∈ keys(factors) && length(factors) == 2 && factors[collect(keys(factors))[end]] == 1 # N can be expressed in the form 2ᵏ ⋅ p, where k ∈ ℕ, p is prime
+        if 2 ∈ keys(factors) && length(factors) == 2 # N can be expressed in the form 2ᵏ ⋅ p, where k, p ∈ ℕ
             k = factors[2]
             p = collect(keys(factors))[end]
+            p_is_prime = isprime(p)
 
-            lₚ = length(digits(p, base=2)) # Length of p in base 2
+            lₚ = k-1 # Length of 2ᵏ in base 2
 
-            # Can split into 2ᵏ chunks of size p, then rader FFT each chunk, then reconstruct
-            chunks = collect(Iterators.partition(x, p))
-            chunk_indices = [(i-1) for i ∈ 1:p]
+            # Can split into 2ᵏ chunks of size p, then FFT each chunk, then reconstruct
+            chunks = Vector{Vector{T}}(collect(Iterators.partition(x, p)))
+            chunk_indices = [(i-1) for i ∈ 1:2^k]
             chunk_bit_indices = [int_to_bits(i, lₚ) for i ∈ chunk_indices]
             chunk_bit_reversed_indices = [bits_to_int(reverse(i)) + 1 for i ∈ chunk_bit_indices] # Julia is 1-indexed, hence adding 1 after bit reversal
             chunks_rearranged = chunks[chunk_bit_reversed_indices]
-            chunks_fft = [rader_FFT(chunk) for chunk ∈ chunks_rearranged]
+            chunks_fft = [p_is_prime ? rader_FFT(chunk) : bluestein_FFT(chunk) for chunk ∈ chunks_rearranged]
 
-            res::Vector{Vector{Complex{Float64}}} = chunks_fft
+            res_vecs::Vector{Vector{Complex{Float64}}} = chunks_fft # used to store butterfly results
 
             for i ∈ 1:k
-                butterfly_size = 2^(i-1)
-                res_chunked = collect(Iterators.partition(res_copy, butterfly_size))
-                res = [fft_butterfly(i[1], i[2], ω) for i ∈ res_chunked]
+                new_res::Vector{Vector{Complex{Float64}}} = []
+                for j in 1:2^(k-i)
+                    new_res[j] = fft_butterfly(res_vecs[],res_vecs[],ω)
+                end
+                res_vecs = new_res
             end
 
-            return res
+            return collect(Iterators.flatten(res_vecs))
         else
-
+            return bluestein_FFT(x)
         end
     end
 end
