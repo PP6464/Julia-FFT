@@ -115,14 +115,37 @@ function sequence(g::Int64, m::Int64)
     return [(g^i)%m for i ∈ 0:m-2]
 end
 
-# Use to generate the entire group (𝐙/p𝐙)* and successive powers (p is prime)
-function generator(p::Int64)
-    for g ∈ 2:p-1
-        perm = sequence(g, p)
-        if length(perm) == p - 1
-            return g, perm
+function primroot(m::Integer)
+    if !isprime(m)
+        error("Argument 'm' must be a prime number")
+    end
+    if m == 2; return 1; end
+
+    P = keys(factor(m-1))
+    for r = 2:(m-1)
+        not_found = true
+        for p in P
+            if powermod(r, div(m-1, p), m) == 1
+                not_found = false
+            end
+        end
+        if not_found
+            return r
         end
     end
+
+    return 0
+end
+
+# Use to generate the entire group (𝐙/p𝐙)* and successive powers (p is prime)
+function generator(p::Int64)
+    # for g ∈ 2:p-1
+    #     perm = sequence(g, p)
+    #     if length(perm) == p - 1
+    #         return g, perm
+    #     end
+    # end
+    return primroot(p), sequence(primroot(p), p)
 end
 
 # FFT convolution of u and v, where u and v are of the same length (uses padding)
@@ -216,4 +239,4 @@ function ifft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <
     return fft(x, 1/ω) ./ N
 end
 
-display(ifft(fft([1,2,3])))
+display(rader_FFT([1,2,3,4,5]))
