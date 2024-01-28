@@ -238,5 +238,3 @@ function ifft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <
 
     return fft(x, 1/ω) ./ N
 end
-
-display(rader_FFT([1,2,3,4,5]))
