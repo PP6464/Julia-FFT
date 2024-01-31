@@ -112,7 +112,7 @@ end
 
 # Successive powers of g up to m - 1, all mod m
 function sequence(g::Int64, m::Int64)
-    return [(g^i)%m for i ∈ 0:m-2]
+    return [(big(g)^i)%m for i ∈ 0:m-2]
 end
 
 function primroot(m::Integer)
@@ -237,4 +237,20 @@ function ifft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <
     end
 
     return fft(x, 1/ω) ./ N
+end
+
+
+l = 2^20
+using BenchmarkTools
+
+x = [rand() for _ in 1:l]
+
+@time begin
+    display("RADIX 2: ")
+    radix2FFT(x)
+end
+
+@time begin
+    display("BLUESTEIN: ")
+    bluestein_FFT(x)
 end
