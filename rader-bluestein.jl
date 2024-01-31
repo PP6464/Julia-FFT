@@ -1,4 +1,4 @@
-include("maths.jl")
+τ = 2π
 
 using Primes
 
