@@ -221,8 +221,6 @@ function fft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <:
 
     if ispow2(N)
         return radix2FFT(x, ω)
-    elseif isprime(N)
-        return rader_FFT(x, 1/ω)
     else
         return bluestein_FFT(x, ω)
     end
@@ -239,18 +237,122 @@ function ifft(x::Vector{T}, ω::Union{Complex{U}, Nothing} = nothing) where {T <
     return fft(x, 1/ω) ./ N
 end
 
+function fft_convolve(x::Vector{T}, y::Vector{U}) where {T <: Number, U <: Number}
+    X = vcat(x, zeros(T, length(y) - 1))
+    Y = vcat(y, zeros(U, length(x) - 1))
 
-l = 2^20
+    return ifft(fft(X) .* fft(Y))[1:length(x) + length(y) - 1]
+end
+
+# l = 2^20
+# using BenchmarkTools
+
+# x = [rand() for _ in 1:l]
+
+# @time begin
+#     display("RADIX 2: ")
+#     radix2FFT(x)
+# end
+
+# @time begin
+#     display("BLUESTEIN: ")
+#     bluestein_FFT(x)
+# end
+
+function oaconvolve(x::Vector{Int64}, y::Vector{Int64}, block_size::Int64 = 4)
+    # Are x and y's lengths mulitples of block_size?
+    X = length(x)
+    Y = length(y)
+
+    # In case the lists are padded
+    orig_X = X
+    orig_Y = Y
+
+    x_mul_block_size = false
+    y_mul_block_size = false
+
+    if X % block_size == 0
+        x_mul_block_size = true
+    elseif Y % block_size == 0
+        y_mul_block_size = true
+    end
+
+    chunks = [[] for _ ∈ 1:(X>Y ? X : Y)]
+    divided_signal = "x"
+
+    if x_mul_block_size
+        # Divide x into chunks
+        for i ∈ 1:(X÷block_size)
+            chunks[i] = x[(i-1) * block_size + 1:i * block_size]
+        end
+    elseif y_mul_block_size
+        # Divide y into chunks
+        divided_signal = "y"
+        for i ∈ 1:(Y÷block_size)
+            chunks[i] = y[(i-1) * block_size + 1:i * block_size]
+        end
+    else
+        # Pad x and then divide it into pieces
+        n_zeros = block_size - (X % block_size)
+        x = vcat(x, zeros(Int64, n_zeros))
+        X = block_size * ((X÷block_size) + 1) # Reflect change in x
+        for i ∈ 1:(X÷block_size)
+            chunks[i] = x[(i-1) * block_size + 1:i * block_size]
+        end
+    end
+
+    while !isempty(chunks) && chunks[end] == []
+        pop!(chunks)
+    end
+
+    output_chunks = [[] for _ ∈ eachindex(chunks)]
+
+    for i ∈ enumerate(chunks)
+        if divided_signal == "x"
+            output_chunks[i[1]] = fft_convolve(convert(Vector{Int64}, map(j -> round(real(j)), i[2])), y)
+        else
+            output_chunks[i[1]] = fft_convolve(convert(Vector{Int64}, map(j -> round(real(j)), i[2])), x)
+        end
+    end
+
+    desired_length = X+Y-1
+
+    # Shift the output chunks to make reconstruction easier
+    for i ∈ eachindex(chunks)
+        if (desired_length - length(output_chunks[i]) - (i-1)*block_size) < 0
+            println(desired_length)
+            println(length(output_chunks[i]))
+            println(block_size)
+            println((i - 1) * block_size)
+        end
+        output_chunks[i] = vcat(
+            zeros(Int64, (i-1) * block_size),
+            output_chunks[i],
+            zeros(Int64, desired_length - length(output_chunks[i]) - (i-1)*block_size)
+        )
+    end
+
+    output = zeros(BigInt, X+Y-1)
+    for i ∈ 1:desired_length
+        output[i] = sum(map(x -> round(real(x[i])), output_chunks))
+    end
+
+    return output[1:(orig_X + orig_Y - 1)]
+end
+
+l = 2*20
+
+list1 = rand(Int, l)
+list2 = rand(Int, l)
+
 using BenchmarkTools
 
-x = [rand() for _ in 1:l]
-
 @time begin
-    display("RADIX 2: ")
-    radix2FFT(x)
+println("FFT convolve")
+fft_convolve(list1, list2)
 end
 
 @time begin
-    display("BLUESTEIN: ")
-    bluestein_FFT(x)
+println("OA convolve")
+oaconvolve(list1, list2, 16)
 end
