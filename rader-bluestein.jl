@@ -244,6 +244,62 @@ function fft_convolve(x::Vector{T}, y::Vector{U}) where {T <: Number, U <: Numbe
     return ifft(fft(X) .* fft(Y))[1:length(x) + length(y) - 1]
 end
 
+# Convert Matrix{T} into Vector{Vector{T}} (a vector of the columns of the input matrix)
+function columns(x::Matrix{T})::Vector{Vector{T}} where T <: Any
+    return [x[begin:end, i] for i ∈ 1:size(x)[2]]
+end
+
+# Convert Matrix{T} into Vector{Vector{T}} (a vector of the rows of the input matrix)
+function rows(x::Matrix{T})::Vector{Vector{T}} where T <: Any
+    return [x[i, begin:end] for i ∈ 1:size(x)[1]]
+end
+
+# Converts Vector{Vector{T}} into Matrix{T}. Columns specifies whether the input is a vector of columns (true) or a vector of rows (false)
+function convert_to_matrix(x::Vector{Vector{T}}, columns::Bool = false)::Matrix{T} where T <: Any
+    if columns
+        res = zeros(T, length(x[1]), length(x))
+        for i ∈ 1:length(x)
+            res[begin:end, i] = x[i]
+        end
+        return res
+    else
+        res = zeros(T, length(x), length(x[1]))
+        for i ∈ 1:length(x)
+            res[i, begin:end] = x[i]
+        end
+        return res
+    end
+end
+
+function fft2(x::Matrix{T}, ω::Union{Complex{A}, Nothing} = nothing)::Matrix{ComplexF64} where {T <: Number, A <: Number}
+    fft_columns = [fft(i, ω) for i ∈ columns(x)]
+    fft_rows = [fft(i, ω) for i ∈ rows(convert_to_matrix(fft_columns, true))]
+    return convert_to_matrix(fft_rows)
+end
+
+function ifft2(x::Matrix{T}, ω::Union{Complex{A}, Nothing} = nothing)::Matrix{ComplexF64} where {T <: Number, A <: Number}
+    ifft_columns = [ifft(i, ω) for i ∈ columns(x)]
+    ifft_rows = [ifft(i, ω) for i ∈ rows(convert_to_matrix(ifft_columns, true))]
+    return convert_to_matrix(ifft_rows)
+end
+
+function conv2(x::Matrix{T}, y::Matrix{U})::Matrix{ComplexF64} where {T <: Number, U <: Number}
+    # Pad to correct dimensions
+    new_m = size(x)[1] + size(y)[1] - 1
+    new_n = size(x)[2] + size(y)[2] - 1
+
+    new_x = zeros(T, new_m, new_n)
+    new_y = zeros(U, new_m, new_n)
+    
+    new_x[1:size(x)[1], 1:size(x)[2]] = x
+    new_y[1:size(y)[1], 1:size(y)[2]] = y
+
+    x = new_x
+    y = new_y
+    
+    return ifft2(fft2(x) .* fft2(y))
+end
+
 # l = 2^20
 # using BenchmarkTools
 
@@ -338,6 +394,24 @@ function oaconvolve(x::Vector{Int64}, y::Vector{Int64}, block_size::Int64 = 4)
     end
 
     return output[1:(orig_X + orig_Y - 1)]
+end
+
+function oaconvolve2(x::Matrix{T}, y::Matrix{U}, block_size_row::Int64 = 4, block_size_col::Int64 = 4) where {T, U <: Number}
+    x_rows, x_cols, y_rows, y_cols = size(x)[1], size(x)[2], size(y)[1], size(y)[2]
+    orig_x_rows, orig_x_cols, orig_y_rows, orig_y_cols = x_rows, x_cols, y_rows, y_cols # In case a matrix is padded
+
+    # Decide whether to divide up x or y
+    divided_mat = "x"
+
+    if x_rows % block_size_row == 0 && x_cols % block_size_col == 0
+        # x shall be divided, so let us chunk it
+
+    elseif y_rows % block_size_row == 0 && y_cols % block_size_col == 0
+        # y shall be divided, so let us chunk it
+        
+    else
+        # x will be divided, but needs to be padded to a nice size
+    end
 end
 
 l = 2*20
