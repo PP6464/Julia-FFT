@@ -408,7 +408,7 @@ function oaconvolve2(x::Matrix{T}, y::Matrix{U}, block_size_row::Int64 = 4, bloc
 
     elseif y_rows % block_size_row == 0 && y_cols % block_size_col == 0
         # y shall be divided, so let us chunk it
-        
+        divided_mat = "y"
     else
         # x will be divided, but needs to be padded to a nice size
     end
