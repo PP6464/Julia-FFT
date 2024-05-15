@@ -402,31 +402,70 @@ function oaconvolve2(x::Matrix{T}, y::Matrix{U}, block_size_row::Int64 = 4, bloc
 
     # Decide whether to divide up x or y
     divided_mat = "x"
+    chunks = [] # Chunks stored as a list of rows
 
     if x_rows % block_size_row == 0 && x_cols % block_size_col == 0
         # x shall be divided, so let us chunk it
-
+        chunks = [x[(i-1)*block_size_row+1:i*block_size_row, begin:end] for i ∈ 1:(x_rows÷block_size_row)]
+        chunks = [[chunks[i][begin:end, (j-1)*block_size_col+1:j*block_size_col] for j ∈ (1:x_cols÷block_size_col)] for i ∈ 1:(x_rows÷block_size_row)]
+        chunks = reduce(vcat, chunks) # Flatten to a vector of matrices
     elseif y_rows % block_size_row == 0 && y_cols % block_size_col == 0
         # y shall be divided, so let us chunk it
         divided_mat = "y"
+        chunks = [y[(i-1)*block_size_row+1:i*block_size_row, begin:end] for i ∈ 1:(y_rows÷block_size_row)]
+        chunks = [[chunks[i][begin:end, (j-1)*block_size_col+1:j*block_size_col] for j ∈ (1:y_cols÷block_size_col)] for i ∈ 1:(x_rows÷block_size_row)]
+        chunks = reduce(vcat, chunks) # Flatten to a vector of matrices
     else
         # x will be divided, but needs to be padded to a nice size
+        padded_x = zeros(T, x_rows % block_size_row == 0 ? x_rows : x_rows + (block_size_row - x_rows % block_size_row), x_cols % block_size_col == 0 ? x_cols : x_cols + (block_size_col - x_cols % block_size_col))
+        padded_x[1:x_rows, 1:x_cols] = x
+        x = padded_x
+        x_rows, x_cols = size(x)
+        chunks = [x[(i-1)*block_size_row+1:i*block_size_row, begin:end] for i ∈ 1:(x_rows÷block_size_row)]
+        chunks = [[chunks[i][begin:end, (j-1)*block_size_col+1:j*block_size_col] for j ∈ (1:x_cols÷block_size_col)] for i ∈ 1:(x_rows÷block_size_row)]
+        chunks = reduce(vcat, chunks) # Flatten to a vector of matrices
     end
+
+    # Convolve each chunk with the other matrix
+    chunks = map(m -> conv2(m, divided_mat == "x" ? y : x), chunks)
+
+    # Shift each chunk into the correct position
+    chunks = map(enumerate(chunks)) do i
+        index = i[1]
+        chunk = i[2]
+        shifted_mat = zeros(Number, x_rows + y_rows - 1, x_cols + y_cols - 1)
+        column_shifted_to = index % ((divided_mat == "x" ? x_cols : y_cols) ÷ block_size_col)
+        row_shifted_to = index ÷ ((divided_mat == "x" ? x_cols : y_cols) ÷ block_size_col)
+        shifted_mat[row_shifted_to*block_size_row+1:row_shifted_to*block_size_row+size(chunk)[1], column_shifted_to*block_size_col+1:column_shifted_to*block_size_col+size(chunk)[2]] = chunk
+        return shifted_mat
+    end
+
+    output = zeros(Number, x_rows + y_rows - 1, x_cols + y_cols - 1)
+
+    for i ∈ 1:x_cols+y_cols-1
+        for j ∈ 1:x_rows+y_rows-1
+            output[i,j] = sum(map(c -> c[i,j], chunks))
+        end
+    end
+
+    return output[1:orig_x_rows+orig_y_rows-1, 1:orig_x_cols+orig_y_cols-1]
 end
 
-l = 2*20
+# l = 2*20
 
-list1 = rand(Int, l)
-list2 = rand(Int, l)
+# list1 = rand(Int, l)
+# list2 = rand(Int, l)
 
-using BenchmarkTools
+# using BenchmarkTools
 
-@time begin
-println("FFT convolve")
-fft_convolve(list1, list2)
-end
+# @time begin
+# println("FFT convolve")
+# fft_convolve(list1, list2)
+# end
 
-@time begin
-println("OA convolve")
-oaconvolve(list1, list2, 16)
-end
+# @time begin
+# println("OA convolve")
+# oaconvolve(list1, list2, 16)
+# end
+
+oaconvolve2([1 2 3 4;5 6 7 8;9 10 11 12;13 14 15 16], [1 2 3 4;3 4 5 6;5 6 7 8;2 3 4 5], 2, 3)
