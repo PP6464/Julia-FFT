@@ -429,43 +429,45 @@ function oaconvolve2(x::Matrix{T}, y::Matrix{U}, block_size_row::Int64 = 4, bloc
     # Convolve each chunk with the other matrix
     chunks = map(m -> conv2(m, divided_mat == "x" ? y : x), chunks)
 
+    width = (divided_mat == "x" ? x_cols : y_cols) ÷ block_size_col# Width of grid of places shifed chunks can be placed (see below)
+
     # Shift each chunk into the correct position
     chunks = map(enumerate(chunks)) do i
         index = i[1]
         chunk = i[2]
-        shifted_mat = zeros(Number, x_rows + y_rows - 1, x_cols + y_cols - 1)
-        column_shifted_to = index % ((divided_mat == "x" ? x_cols : y_cols) ÷ block_size_col)
-        row_shifted_to = index ÷ ((divided_mat == "x" ? x_cols : y_cols) ÷ block_size_col)
+        shifted_mat = zeros(Number, x_rows + y_rows + block_size_row, x_cols + y_cols + block_size_col)
+        column_shifted_to = (index - 1) % width # 0-indexed
+        row_shifted_to = (index - 1) ÷ width # 0-indexed
         shifted_mat[row_shifted_to*block_size_row+1:row_shifted_to*block_size_row+size(chunk)[1], column_shifted_to*block_size_col+1:column_shifted_to*block_size_col+size(chunk)[2]] = chunk
         return shifted_mat
     end
 
-    output = zeros(Number, x_rows + y_rows - 1, x_cols + y_cols - 1)
+    output = zeros(Number, x_rows + y_rows + block_size_row, x_cols + y_cols + block_size_col)
 
     for i ∈ 1:x_cols+y_cols-1
         for j ∈ 1:x_rows+y_rows-1
-            output[i,j] = sum(map(c -> c[i,j], chunks))
+            sum(map(c -> c[j,i], chunks))
+            output[j,i] = sum(map(c -> c[j,i], chunks))
         end
     end
 
     return output[1:orig_x_rows+orig_y_rows-1, 1:orig_x_cols+orig_y_cols-1]
 end
 
-# l = 2*20
+m = 2^2
+n = 3^2
 
-# list1 = rand(Int, l)
-# list2 = rand(Int, l)
+mat1 = rand(Int, m, n)
+mat2 = rand(Int, m, n)
 
-# using BenchmarkTools
+using BenchmarkTools
 
-# @time begin
-# println("FFT convolve")
-# fft_convolve(list1, list2)
-# end
+@time begin
+println("FFT convolve")
+conv2(mat1, mat2)
+end
 
-# @time begin
-# println("OA convolve")
-# oaconvolve(list1, list2, 16)
-# end
-
-oaconvolve2([1 2 3 4;5 6 7 8;9 10 11 12;13 14 15 16], [1 2 3 4;3 4 5 6;5 6 7 8;2 3 4 5], 2, 3)
+@time begin
+println("OA convolve")
+oaconvolve2(mat1, mat2, 2, 3)
+end
